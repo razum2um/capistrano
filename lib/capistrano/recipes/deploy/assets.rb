@@ -19,11 +19,20 @@ namespace :deploy do
       :assets_prefix variable to match.
     DESC
     task :symlink, :roles => :web, :except => { :no_release => true } do
+
+      if fetch(:relative_symlinks, false)
+        link_path = Pathname.new("#{shared_path}/assets").relative_path_from(Pathname.new("#{latest_release}/public"))
+      else
+        link_path = "#{shared_path}/assets"
+      end
+
+      #raise "@@@@#{link_path}@@@@"
       run <<-CMD
         rm -rf #{latest_release}/public/#{assets_prefix} &&
         mkdir -p #{latest_release}/public &&
         mkdir -p #{shared_path}/assets &&
-        ln -s #{shared_path}/assets #{latest_release}/public/#{assets_prefix}
+
+        ln -s #{link_path} #{latest_release}/public/#{assets_prefix}
       CMD
     end
 

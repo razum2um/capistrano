@@ -2,6 +2,7 @@ require 'benchmark'
 require 'yaml'
 require 'capistrano/recipes/deploy/scm'
 require 'capistrano/recipes/deploy/strategy'
+require "pathname"
 
 def _cset(name, *args, &block)
   unless exists?(name)
@@ -127,7 +128,7 @@ end
 # THUS, if you want to try to run something via sudo, and what to use the
 # root user, you'd just to try_sudo('something'). If you wanted to try_sudo as
 # someone else, you'd just do try_sudo('something', :as => "bob"). If you
-# always wanted sudo to run as a particular user, you could do 
+# always wanted sudo to run as a particular user, you could do
 # set(:admin_runner, "bob").
 def try_sudo(*args)
   options = args.last.is_a?(Hash) ? args.pop : {}
@@ -250,7 +251,14 @@ namespace :deploy do
       mkdir -p #{latest_release}/tmp
     CMD
     shared_children.map do |d|
-      run "ln -s #{shared_path}/#{d.split('/').last} #{latest_release}/#{d}"
+      if fetch(:relative_symlinks, false)
+        sub_latest_release = Pathname("#{latest_release}/#{d}/..")
+        sub_shared_path = Pathname("#{shared_path}/#{d.split('/').last}")
+        link_path = sub_shared_path.relative_path_from(sub_latest_release)
+      else
+        link_path = "#{shared_path}/#{d.split('/').last}"
+      end
+      run "ln -s #{link_path} #{latest_release}/#{d}"
     end
 
     if fetch(:normalize_asset_timestamps, true)
@@ -280,13 +288,23 @@ namespace :deploy do
   task :create_symlink, :except => { :no_release => true } do
     on_rollback do
       if previous_release
-        run "rm -f #{current_path}; ln -s #{previous_release} #{current_path}; true"
+        if fetch(:relative_symlinks, false)
+          link_path = Pathname.new(previous_release).relative_path_from(Pathname.new(deploy_to))
+        else
+          link_path = previous_release
+        end
+        run "rm -f #{current_path}; ln -s #{link_path} #{current_path}; true"
       else
         logger.important "no previous release to rollback to, rollback of symlink skipped"
       end
     end
 
-    run "rm -f #{current_path} && ln -s #{latest_release} #{current_path}"
+    if fetch(:relative_symlinks, false)
+      link_path = Pathname.new(latest_release).relative_path_from(Pathname.new(deploy_to))
+    else
+      link_path = latest_release
+    end
+    run "rm -f #{current_path} && ln -s #{link_path} #{current_path}"
   end
 
   desc <<-DESC
@@ -539,7 +557,7 @@ namespace :deploy do
               UNTIL="12pm Central Time"
 
       You can use a different template for the maintenance page by setting the \
-      :maintenance_template_path variable in your deploy.rb file. The template file \ 
+      :maintenance_template_path variable in your deploy.rb file. The template file \
       should either be a plaintext or an erb file.
 
       Further customization will require that you write your own task.
