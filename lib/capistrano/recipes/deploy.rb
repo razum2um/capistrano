@@ -304,7 +304,7 @@ namespace :deploy do
     else
       link_path = latest_release
     end
-    run "rm -f #{current_path} && ln -s #{link_path} #{current_path}"
+    run "(cd #{deploy_to} && rm -f #{current_path} && ln -s #{link_path} #{current_path})"
   end
 
   desc <<-DESC
